@@ -53,6 +53,29 @@ app = FastAPI(
 )
 
 
+@app.get("/api/config")
+async def get_config():
+    '''
+    Discover available modules and stages by scanning runtime-automation dir.
+    Nookbag calls this to know which buttons to show.
+    '''
+    from pathlib import Path
+    import re
+    scripts_dir = Path(f'{settings.base_dir}/{settings.scripts_path}')
+    config = {}
+    if scripts_dir.exists():
+        for module_dir in sorted(scripts_dir.iterdir()):
+            if module_dir.is_dir() and not module_dir.name.startswith('.'):
+                stages = []
+                for stage_file in sorted(module_dir.iterdir()):
+                    m = re.match(r'^(setup|solve|validation)\.yml$', stage_file.name)
+                    if m:
+                        stages.append(m.group(1))
+                if stages:
+                    config[module_dir.name] = stages
+    return config
+
+
 @app.post("/api/{module}/{stage}", status_code=HTTPStatus.ACCEPTED)
 async def run_task(module: str, stage: str):
     '''
