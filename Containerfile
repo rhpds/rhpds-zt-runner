@@ -46,7 +46,11 @@ COPY ansible-plugins/action/ /usr/share/ansible/plugins/action/
 COPY api/ /app/
 
 # ── Fix permissions for OpenShift random UID (gid=0 must write) ──────────────
-RUN chmod -R g+rwX /usr/share/ansible && \
+# ansible-galaxy creates .ansible/tmp as root — must be group-writable
+RUN mkdir -p /opt/app-root/src/.ansible/tmp && \
+    chmod -R g+rwX /opt/app-root/src/.ansible && \
+    chown -R 1001:0 /opt/app-root/src/.ansible && \
+    chmod -R g+rwX /usr/share/ansible && \
     chmod -R g+rwX /app
 
 ENV BASE_DIR="/app"
