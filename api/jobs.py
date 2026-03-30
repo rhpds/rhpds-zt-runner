@@ -52,6 +52,30 @@ def _load_user_data():
                     extra['ocp_console_url'] = ud.get('openshift_console_url', '')
                     extra['ocp_api_url'] = ud.get('openshift_api_url', '')
                     logger.info('Loaded user data from showroom-userdata CM: user=%s', user)
+
+                    # --- Read zt-runner-kubeconfig Secret if present ---
+                    kc_url = (f'https://kubernetes.default.svc/api/v1/namespaces/'
+                              f'{namespace}/secrets/zt-runner-kubeconfig')
+                    try:
+                        kc_req = urllib.request.Request(
+                            kc_url, headers={'Authorization': f'Bearer {token}'})
+                        with urllib.request.urlopen(kc_req, context=ctx, timeout=5) as kr:
+                            kc_data = json.loads(kr.read())
+                            kc_b64 = kc_data.get('data', {}).get('kubeconfig', '')
+                            if kc_b64:
+                                import base64
+                                import tempfile
+                                kc_content = base64.b64decode(kc_b64).decode()
+                                kc_file = tempfile.NamedTemporaryFile(
+                                    mode='w', suffix='.kubeconfig',
+                                    delete=False, prefix='/tmp/zt-runner-'
+                                )
+                                kc_file.write(kc_content)
+                                kc_file.flush()
+                                extra['k8s_kubeconfig'] = kc_file.name
+                                logger.info('Loaded zt-runner kubeconfig from Secret')
+                    except Exception as kc_exc:
+                        logger.debug('No zt-runner-kubeconfig Secret (using SA token): %s', kc_exc)
         except Exception as exc:
             logger.warning('Could not load showroom-userdata ConfigMap: %s', exc)
 
