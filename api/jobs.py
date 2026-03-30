@@ -1,14 +1,72 @@
 
 import sys
+import os
 import logging
 import uuid
 import json
+import urllib.request
+import ssl
+import yaml
 from ansible_runner import Runner, RunnerConfig
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from pathlib import Path
 
 import settings
+
+
+def _load_user_data():
+    '''
+    Load user data and pass as extravars to every ansible-runner job.
+    OCP mode: reads showroom-userdata ConfigMap via SA token.
+    RHEL mode: reads from env vars (BASTION_HOST, ANSIBLE_USER, etc).
+    This means playbooks can use {{ student_user }}, {{ guid }} etc
+    directly without reading the ConfigMap themselves.
+    '''
+    extra = {}
+
+    # --- OCP mode: SA token + showroom-userdata ConfigMap ---
+    sa_token = Path('/var/run/secrets/kubernetes.io/serviceaccount/token')
+    sa_ns = Path('/var/run/secrets/kubernetes.io/serviceaccount/namespace')
+
+    if sa_token.exists() and sa_ns.exists():
+        try:
+            token = sa_token.read_text().strip()
+            namespace = sa_ns.read_text().strip()
+            url = (f'https://kubernetes.default.svc/api/v1/namespaces/'
+                   f'{namespace}/configmaps/showroom-userdata')
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
+            with urllib.request.urlopen(req, context=ctx, timeout=5) as resp:
+                data = json.loads(resp.read())
+                raw = data.get('data', {}).get('user_data.yml', '')
+                if raw:
+                    ud = yaml.safe_load(raw)
+                    user = ud.get('user', '')
+                    extra['student_user'] = user
+                    extra['student_ns'] = f'{user}-zttest'
+                    extra['student_ns2'] = f'{user}-ztworkspace'
+                    extra['guid'] = ud.get('guid', os.getenv('GUID', ''))
+                    extra['ocp_console_url'] = ud.get('openshift_console_url', '')
+                    extra['ocp_api_url'] = ud.get('openshift_api_url', '')
+                    logger.info('Loaded user data from showroom-userdata CM: user=%s', user)
+        except Exception as exc:
+            logger.warning('Could not load showroom-userdata ConfigMap: %s', exc)
+
+    # --- RHEL / fallback: read from env vars ---
+    if not extra.get('student_user'):
+        bastion_user = os.getenv('ANSIBLE_USER', os.getenv('BASTION_USER', 'lab-user'))
+        extra.setdefault('student_user', bastion_user)
+        extra.setdefault('guid', os.getenv('GUID', ''))
+        extra.setdefault('bastion_host', os.getenv('BASTION_HOST', ''))
+        extra.setdefault('bastion_port', os.getenv('BASTION_PORT', '22'))
+        extra.setdefault('bastion_user', bastion_user)
+        extra.setdefault('bastion_password', os.getenv('ANSIBLE_PASSWORD', ''))
+        logger.info('Loaded user data from env vars: bastion_user=%s', bastion_user)
+
+    return extra
 
 this = sys.modules[__name__]
 
@@ -117,7 +175,8 @@ def create_job(module, stage):
             f'{settings.base_dir}/'
             f'{settings.jobs_path}/'
             f'{job_id}'
-        )
+        ),
+        **_load_user_data(),
     }
 
     rc = RunnerConfig(
