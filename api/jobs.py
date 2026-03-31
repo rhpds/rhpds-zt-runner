@@ -57,6 +57,9 @@ def _load_user_data():
                         extra['bastion_port'] = str(ud.get('bastion_ssh_port', '22'))
                         extra['bastion_user'] = ud.get('bastion_ssh_user_name', 'lab-user')
                         extra['bastion_password'] = ud.get('bastion_ssh_password', '')
+                        # For bastion+OCP labs student_user is the bastion SSH user
+                        if not extra.get('student_user'):
+                            extra['student_user'] = extra['bastion_user']
                         logger.info('Loaded bastion data from showroom-userdata CM: host=%s',
                                     extra['bastion_host'])
                     logger.info('Loaded user data from showroom-userdata CM: user=%s', user)
