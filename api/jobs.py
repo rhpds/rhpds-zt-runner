@@ -53,66 +53,30 @@ def _load_user_data():
                     extra['ocp_api_url'] = ud.get('openshift_api_url', '')
                     logger.info('Loaded user data from showroom-userdata CM: user=%s', user)
 
-                    # --- TokenRequest: get short-lived token for zt-runner SA ---
-                    # Reads zt-runner-sa-config ConfigMap to find SA name/namespace,
-                    # then calls TokenRequest API for a 1h token. No long-lived tokens stored.
-                    cm_url = (f'https://kubernetes.default.svc/api/v1/namespaces/'
-                              f'{namespace}/configmaps/zt-runner-sa-config')
+                    # --- Read zt-runner-kubeconfig Secret (written at provision time) ---
+                    # No TokenRequest needed — pod SA reads its own namespace Secret.
+                    # Playbooks use this kubeconfig, no showroom SA RBAC required.
+                    kc_url = (f'https://kubernetes.default.svc/api/v1/namespaces/'
+                              f'{namespace}/secrets/zt-runner-kubeconfig')
                     try:
-                        cm_req = urllib.request.Request(
-                            cm_url, headers={'Authorization': f'Bearer {token}'})
-                        with urllib.request.urlopen(cm_req, context=ctx, timeout=5) as cr:
-                            cm_data = json.loads(cr.read()).get('data', {})
-                            sa_name = cm_data.get('sa_name', 'zt-runner')
-                            sa_ns = cm_data.get('sa_namespace', '')
-                            api_url = cm_data.get('api_url', 'https://kubernetes.default.svc')
-
-                            if sa_ns:
-                                # Call TokenRequest API — 1h short-lived token
-                                tr_url = (f'https://kubernetes.default.svc/api/v1/namespaces/'
-                                          f'{sa_ns}/serviceaccounts/{sa_name}/token')
-                                tr_body = json.dumps({
-                                    'apiVersion': 'authentication.k8s.io/v1',
-                                    'kind': 'TokenRequest',
-                                    'spec': {'expirationSeconds': 3600}
-                                }).encode()
-                                tr_req = urllib.request.Request(
-                                    tr_url, data=tr_body, method='POST',
-                                    headers={
-                                        'Authorization': f'Bearer {token}',
-                                        'Content-Type': 'application/json'
-                                    })
-                                with urllib.request.urlopen(tr_req, context=ctx, timeout=5) as tr:
-                                    tr_data = json.loads(tr.read())
-                                    sa_token = tr_data['status']['token']
-
-                                    # Build kubeconfig with short-lived token
-                                    ca_path = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
-                                    import base64
-                                    ca_b64 = base64.b64encode(
-                                        open(ca_path, 'rb').read()).decode()
-                                    kubeconfig = (
-                                        f'apiVersion: v1\nkind: Config\n'
-                                        f'clusters:\n- name: cluster\n  cluster:\n'
-                                        f'    server: "{api_url}"\n'
-                                        f'    certificate-authority-data: "{ca_b64}"\n'
-                                        f'contexts:\n- name: zt-runner\n  context:\n'
-                                        f'    cluster: cluster\n    user: zt-runner\n'
-                                        f'current-context: zt-runner\n'
-                                        f'users:\n- name: zt-runner\n  user:\n'
-                                        f'    token: "{sa_token}"\n'
-                                    )
-                                    import tempfile
-                                    kc_file = tempfile.NamedTemporaryFile(
-                                        mode='w', suffix='.kubeconfig',
-                                        delete=False, prefix='/tmp/zt-runner-')
-                                    kc_file.write(kubeconfig)
-                                    kc_file.flush()
-                                    extra['k8s_kubeconfig'] = kc_file.name
-                                    logger.info('TokenRequest: got 1h token for %s/%s',
-                                                sa_ns, sa_name)
+                        kc_req = urllib.request.Request(
+                            kc_url, headers={'Authorization': f'Bearer {token}'})
+                        with urllib.request.urlopen(kc_req, context=ctx, timeout=5) as kr:
+                            kc_data = json.loads(kr.read())
+                            import base64, tempfile
+                            kc_b64 = kc_data.get('data', {}).get('kubeconfig', '')
+                            if kc_b64:
+                                kc_content = base64.b64decode(kc_b64).decode()
+                                kc_file = tempfile.NamedTemporaryFile(
+                                    mode='w', suffix='.kubeconfig',
+                                    delete=False, prefix='/tmp/zt-runner-')
+                                kc_file.write(kc_content)
+                                kc_file.flush()
+                                extra['k8s_kubeconfig'] = kc_file.name
+                                logger.info('Loaded kubeconfig from Secret (mode: %s)',
+                                            kc_data.get('metadata', {}).get('labels', {}).get('mode', 'unknown'))
                     except Exception as kc_exc:
-                        logger.debug('No zt-runner-sa-config or TokenRequest failed: %s', kc_exc)
+                        logger.debug('No zt-runner-kubeconfig Secret: %s', kc_exc)
         except Exception as exc:
             logger.warning('Could not load showroom-userdata ConfigMap: %s', exc)
 
