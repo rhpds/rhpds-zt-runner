@@ -51,6 +51,14 @@ def _load_user_data():
                     extra['guid'] = ud.get('guid', os.getenv('GUID', ''))
                     extra['ocp_console_url'] = ud.get('openshift_console_url', '')
                     extra['ocp_api_url'] = ud.get('openshift_api_url', '')
+                    # --- Bastion SSH vars (present for bastion+OCP labs) ---
+                    if ud.get('bastion_public_hostname'):
+                        extra['bastion_host'] = ud.get('bastion_public_hostname', '')
+                        extra['bastion_port'] = str(ud.get('bastion_ssh_port', '22'))
+                        extra['bastion_user'] = ud.get('bastion_ssh_user_name', 'lab-user')
+                        extra['bastion_password'] = ud.get('bastion_ssh_password', '')
+                        logger.info('Loaded bastion data from showroom-userdata CM: host=%s',
+                                    extra['bastion_host'])
                     logger.info('Loaded user data from showroom-userdata CM: user=%s', user)
 
                     # --- Read zt-runner-kubeconfig Secret (written at provision time) ---
