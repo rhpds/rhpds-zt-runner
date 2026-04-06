@@ -37,6 +37,45 @@ stream_app = Flask(__name__)
 logger = logging.getLogger('stream_api')
 
 
+def _install_lab_requirements():
+    """
+    Install lab-specific Python packages and Ansible collections from
+    requirements files in the runtime-automation directory.
+
+    Supported files:
+      runtime-automation/requirements.txt  → pip install
+      runtime-automation/requirements.yml  → ansible-galaxy collection install
+    """
+    pip_reqs = os.path.join(RUNTIME_DIR, 'requirements.txt')
+    galaxy_reqs = os.path.join(RUNTIME_DIR, 'requirements.yml')
+
+    if os.path.exists(pip_reqs):
+        logger.info('Installing lab Python packages from requirements.txt')
+        try:
+            subprocess.run(
+                ['pip', 'install', '--quiet', '-r', pip_reqs],
+                check=True, capture_output=True
+            )
+            logger.info('Lab Python packages installed')
+        except subprocess.CalledProcessError as e:
+            logger.warning('Failed to install lab packages: %s', e.stderr.decode())
+
+    if os.path.exists(galaxy_reqs):
+        logger.info('Installing lab Ansible collections from requirements.yml')
+        try:
+            subprocess.run(
+                ['ansible-galaxy', 'collection', 'install', '-r', galaxy_reqs],
+                check=True, capture_output=True
+            )
+            logger.info('Lab Ansible collections installed')
+        except subprocess.CalledProcessError as e:
+            logger.warning('Failed to install lab collections: %s', e.stderr.decode())
+
+
+# Install lab requirements at startup
+_install_lab_requirements()
+
+
 def _build_extravars_file():
     """Write all injected extravars to a temp file for ansible-playbook -e @file."""
     extravars = _load_user_data()
