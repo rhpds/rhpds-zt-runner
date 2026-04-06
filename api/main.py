@@ -108,6 +108,14 @@ async def get_job(uid: UUID):
     return {'Status': status, 'Output': output}
 
 
+from stream_api import stream_app
+
+# Mount Flask SSE app for classic showroom (Option B - Tyrell's approach)
+# Routes: /stream/solve/<module>, /stream/validate/<module>, /stream/config
+from a2wsgi import WSGIMiddleware
+app.mount('/stream', WSGIMiddleware(stream_app))
+
+
 if __name__ == '__main__':
     uvicorn.run(
         'main:app',
