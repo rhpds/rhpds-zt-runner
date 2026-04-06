@@ -26,7 +26,7 @@ import logging
 from flask import Flask, Response, jsonify
 
 # Reuse existing extravar injection from jobs.py
-from jobs import _load_user_data, _write_kubeconfig
+from jobs import _load_user_data
 
 LOG_DIR = '/tmp/playbook-logs'
 RUNTIME_DIR = os.environ.get('BASE_DIR', '/app') + '/runtime-automation'
