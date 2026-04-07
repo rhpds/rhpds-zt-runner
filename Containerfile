@@ -22,8 +22,7 @@ RUN dnf install -y sshpass && dnf clean all
 RUN OC_VERSION=4.20.18 && \
   curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux.tar.gz | \
   tar xz -C /usr/local/bin oc kubectl && \
-  chmod +x /usr/local/bin/oc /usr/local/bin/kubectl && \
-  oc version --client
+  chmod +x /usr/local/bin/oc /usr/local/bin/kubectl
 
 RUN chown -R ${USER_UID}:0 /app
 
