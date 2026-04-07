@@ -121,8 +121,14 @@ def _run_playbook(playbook_path, output_queue):
     try:
         vars_file, kubeconfig = _build_extravars_file()
 
-        cmd = ['ansible-playbook', playbook_path, '-v', '-e', f'@{vars_file}',
-               '-e', f'job_info_dir={job_info_dir}']
+        cmd = ['ansible-playbook', playbook_path]
+
+        # Add verbosity flag if set (e.g., ANSIBLE_VERBOSITY="-v" or "-vv")
+        verbosity = os.environ.get('ANSIBLE_VERBOSITY', '').strip()
+        if verbosity:
+            cmd.append(verbosity)
+
+        cmd.extend(['-e', f'@{vars_file}', '-e', f'job_info_dir={job_info_dir}'])
         if kubeconfig:
             cmd += ['-e', f'k8s_kubeconfig={kubeconfig}']
 
