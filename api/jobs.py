@@ -15,17 +15,69 @@ from pathlib import Path
 import settings
 
 
+USER_DATA_FILE = '/user_data/user_data.yml'
+
 def _load_user_data():
     '''
     Load user data and pass as extravars to every ansible-runner job.
-    OCP mode: reads showroom-userdata ConfigMap via SA token.
-    RHEL mode: reads from env vars (BASTION_HOST, ANSIBLE_USER, etc).
-    This means playbooks can use {{ student_user }}, {{ guid }} etc
-    directly without reading the ConfigMap themselves.
+    Priority:
+      1. Mounted /user_data/user_data.yml (zerotouch chart mounts showroom-userdata CM here)
+      2. OCP mode: reads showroom-userdata ConfigMap via SA token
+      3. RHEL mode: reads from env vars (BASTION_HOST, ANSIBLE_USER, etc)
     '''
     extra = {}
 
-    # --- OCP mode: SA token + showroom-userdata ConfigMap ---
+    # --- Priority 1: mounted ConfigMap file (zerotouch chart) ---
+    if Path(USER_DATA_FILE).exists():
+        try:
+            with open(USER_DATA_FILE) as f:
+                ud = yaml.safe_load(f) or {}
+            # Pass ALL keys from user_data.yml as extravars
+            extra.update({k: v for k, v in ud.items() if isinstance(v, (str, int, float, bool))})
+            # Also derive standard RHDP extravar names
+            user = ud.get('user', '')
+            extra['student_user'] = user or ud.get('bastion_ssh_user_name', 'lab-user')
+            extra['student_ns'] = f'{user}-zttest' if user else ''
+            extra['student_ns2'] = f'{user}-ztworkspace' if user else ''
+            extra['guid'] = ud.get('guid', os.getenv('GUID', ''))
+            extra['bastion_host'] = ud.get('bastion_public_hostname', '')
+            extra['bastion_port'] = str(ud.get('bastion_ssh_port', '22'))
+            extra['bastion_user'] = ud.get('bastion_ssh_user_name', 'lab-user')
+            extra['bastion_password'] = ud.get('bastion_ssh_password', '')
+            logger.info('Loaded user data from mounted %s: user=%s', USER_DATA_FILE, extra.get('student_user'))
+        except Exception as e:
+            logger.warning('Failed to read %s: %s', USER_DATA_FILE, e)
+
+    if extra:
+        # Try to get kubeconfig Secret if SA token available
+        sa_token = Path('/var/run/secrets/kubernetes.io/serviceaccount/token')
+        sa_ns = Path('/var/run/secrets/kubernetes.io/serviceaccount/namespace')
+        if sa_token.exists() and sa_ns.exists():
+            try:
+                token = sa_token.read_text().strip()
+                namespace = sa_ns.read_text().strip()
+                kc_url = (f'https://kubernetes.default.svc/api/v1/namespaces/'
+                          f'{namespace}/secrets/zt-runner-kubeconfig')
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                req = urllib.request.Request(kc_url, headers={'Authorization': f'Bearer {token}'})
+                with urllib.request.urlopen(req, context=ctx, timeout=5) as resp:
+                    kc_data = json.loads(resp.read())
+                    kc_b64 = kc_data.get('data', {}).get('kubeconfig', '')
+                    if kc_b64:
+                        import base64, tempfile
+                        kc_file = tempfile.NamedTemporaryFile(
+                            mode='wb', suffix='.kubeconfig', delete=False, prefix='zt-runner-')
+                        kc_file.write(base64.b64decode(kc_b64))
+                        kc_file.close()
+                        extra['k8s_kubeconfig'] = kc_file.name
+                        logger.info('Loaded kubeconfig from Secret')
+            except Exception as e:
+                logger.debug('No kubeconfig Secret: %s', e)
+        return extra
+
+    # --- Priority 2: OCP mode via Kubernetes API ---
     sa_token = Path('/var/run/secrets/kubernetes.io/serviceaccount/token')
     sa_ns = Path('/var/run/secrets/kubernetes.io/serviceaccount/namespace')
 
