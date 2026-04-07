@@ -30,6 +30,7 @@ import subprocess
 import logging
 
 from flask import Flask, Response, jsonify, abort
+from flask_cors import CORS
 
 MAX_CONCURRENT_PLAYBOOKS = int(os.environ.get('MAX_CONCURRENT_PLAYBOOKS', 4))
 _playbook_semaphore = threading.Semaphore(MAX_CONCURRENT_PLAYBOOKS)
@@ -56,6 +57,7 @@ RUNTIME_DIR = os.path.join(os.environ.get('BASE_DIR', _base), 'runtime-automatio
 os.makedirs(LOG_DIR, exist_ok=True)
 
 stream_app = Flask(__name__)
+CORS(stream_app)
 logger = logging.getLogger('stream_api')
 
 _MODULE_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]*$')
