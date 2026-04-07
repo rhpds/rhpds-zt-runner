@@ -39,10 +39,15 @@ LOG_DIR = '/tmp/playbook-logs'
 # - /showroom/repo/runtime-automation  (OCP zerotouch chart — git-cloner clones here)
 # - /app/runtime-automation            (RHEL vm_workload_showroom — mounted from host)
 # - override with RUNTIME_AUTOMATION_DIR env var
-# zerotouch chart mounts repo/runtime-automation → /app/runtime-automation
-# vm_workload_showroom (RHEL) also mounts to /app/runtime-automation
-# Both use /app — override with BASE_DIR env var for custom setups
-RUNTIME_DIR = os.path.join(os.environ.get('BASE_DIR', '/app'), 'runtime-automation')
+# Zerotouch chart mounts runtime-automation at /app/runtime-automation
+# when runtime_automation.setup=true. Otherwise full repo at /showroom/repo.
+# RHEL (vm_workload_showroom) mounts at /app/runtime-automation.
+# Check explicit mount first, fallback to full repo, override with BASE_DIR.
+_base = (
+    '/app' if os.path.isdir('/app/runtime-automation')
+    else '/showroom/repo'
+)
+RUNTIME_DIR = os.path.join(os.environ.get('BASE_DIR', _base), 'runtime-automation')
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
