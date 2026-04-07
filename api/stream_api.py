@@ -94,16 +94,31 @@ def _install_lab_requirements():
 _install_lab_requirements()
 
 
+USER_DATA_FILE = '/user_data/user_data.yml'
+
 def _build_extravars_file():
-    """Write all injected extravars to a temp file for ansible-playbook -e @file."""
-    extravars = _load_user_data()
-    tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False)
-    for k, v in extravars.items():
-        # Write as YAML key: value (skip kubeconfig path — passed separately)
-        if k != 'k8s_kubeconfig':
+    """Build extravars file from mounted user_data.yml (preferred) or Kubernetes CM."""
+    kubeconfig = ''
+    tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False, prefix='zt-extravars-')
+
+    if os.path.exists(USER_DATA_FILE):
+        # Use mounted ConfigMap file directly — no Kubernetes API call needed
+        logger.info('Loading extravars from mounted %s', USER_DATA_FILE)
+        import yaml as _yaml
+        with open(USER_DATA_FILE) as f:
+            data = _yaml.safe_load(f) or {}
+        for k, v in data.items():
             tmp.write(f"{k}: {json.dumps(v)}\n")
+    else:
+        # Fallback: read from Kubernetes CM via API
+        logger.info('Mounted user_data.yml not found, reading from Kubernetes CM')
+        extravars = _load_user_data()
+        kubeconfig = extravars.pop('k8s_kubeconfig', '')
+        for k, v in extravars.items():
+            tmp.write(f"{k}: {json.dumps(v)}\n")
+
     tmp.close()
-    return tmp.name, extravars.get('k8s_kubeconfig', '')
+    return tmp.name, kubeconfig
 
 
 def _run_playbook(playbook_path, output_queue):
