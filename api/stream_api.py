@@ -257,7 +257,27 @@ def _sse_stream(playbook_path, label):
 
 @stream_app.route('/health')
 def health():
-    return jsonify({'status': 'healthy'}), 200
+    checks = {'api': 'ok'}
+    status_code = 200
+
+    if not os.path.isdir(RUNTIME_DIR):
+        checks['runtime_dir'] = f'missing: {RUNTIME_DIR}'
+        status_code = 503
+    else:
+        checks['runtime_dir'] = 'ok'
+
+    try:
+        subprocess.run(
+            ['ansible-playbook', '--version'],
+            capture_output=True, timeout=5, check=True
+        )
+        checks['ansible'] = 'ok'
+    except Exception:
+        checks['ansible'] = 'unavailable'
+        status_code = 503
+
+    checks['status'] = 'healthy' if status_code == 200 else 'degraded'
+    return jsonify(checks), status_code
 
 
 @stream_app.route('/config')
