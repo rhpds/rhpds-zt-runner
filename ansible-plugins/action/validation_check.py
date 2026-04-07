@@ -136,18 +136,17 @@ class ActionModule(ActionBase):
             cond.when = [condition]
             test_result = cond.evaluate_conditional(templar=self._templar, all_vars=task_vars)
             try:
-                
-                if not test_result and e_message != None:
-                    f = open(output_result_path, 'w')
-                    f.write(e_message)
+                if not test_result and e_message is not None:
+                    with open(output_result_path, 'w') as f:
+                        f.write(e_message)
                     result['failed'] = True
                     result['evaluated_to'] = test_result
                     result['condition'] = condition
                     result['msg'] = f"{e_message} : Message written to log"
                     return result
-                elif test_result and p_message != None:
-                    f = open(output_result_path, 'w')
-                    f.write(p_message)
+                elif test_result and p_message is not None:
+                    with open(output_result_path, 'w') as f:
+                        f.write(p_message)
                     result['changed'] = True
                     result['evaluated_to'] = test_result
                     result['condition'] = condition
@@ -159,6 +158,6 @@ class ActionModule(ActionBase):
                     return result
 
             except Exception as e:
-                    result['failed'] = True
-                    result['msg'] = f"Failed to write message to log: {e}"
-                    return result
+                result['failed'] = True
+                result['msg'] = f"Failed to write message to log: {e}"
+                return result

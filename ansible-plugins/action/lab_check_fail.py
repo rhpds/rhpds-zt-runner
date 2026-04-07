@@ -72,13 +72,13 @@ class ActionModule(ActionBase):
         result['_ansible_verbose_always'] = True
         
         try:
-            f = open(output_result_path, 'w')
-            f.write(msg)
+            with open(output_result_path, 'w') as f:
+                f.write(msg)
             result['failed'] = True
             result['msg'] = f"{msg} - Message written to log"
             return result
-                
+
         except Exception as e:
-                result['failed'] = True
-                result['msg'] = f"Failed to write message to log: {e}"
-                return result
+            result['failed'] = True
+            result['msg'] = f"Failed to write message to log: {e}"
+            return result
