@@ -20,6 +20,7 @@ Extravar injection (from showroom-userdata CM):
 """
 
 import os
+import re
 import json
 import time
 import queue
@@ -28,7 +29,7 @@ import tempfile
 import subprocess
 import logging
 
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, abort
 
 # Reuse existing extravar injection from jobs.py
 from jobs import _load_user_data
@@ -53,6 +54,18 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 stream_app = Flask(__name__)
 logger = logging.getLogger('stream_api')
+
+_MODULE_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]*$')
+
+
+def _validated_module_dir(module_name):
+    """Validate module_name to prevent path traversal and return its absolute path."""
+    if not _MODULE_RE.match(module_name):
+        return None
+    candidate = os.path.realpath(os.path.join(RUNTIME_DIR, module_name))
+    if not candidate.startswith(os.path.realpath(RUNTIME_DIR) + os.sep):
+        return None
+    return candidate
 
 
 def _install_lab_requirements():
@@ -235,23 +248,30 @@ def config():
 
 @stream_app.route('/solve/<module_name>')
 def solve(module_name):
-    playbook = os.path.join(RUNTIME_DIR, module_name, 'solve.yml')
+    module_dir = _validated_module_dir(module_name)
+    if module_dir is None:
+        abort(400, description=f"Invalid module name: {module_name}")
+    playbook = os.path.join(module_dir, 'solve.yml')
     return _sse_stream(playbook, f'solve for {module_name}')
 
 
 @stream_app.route('/validate/<module_name>')
 def validate(module_name):
-    # Support both validate.yml and validation.yml — transparent to developers
+    module_dir = _validated_module_dir(module_name)
+    if module_dir is None:
+        abort(400, description=f"Invalid module name: {module_name}")
     for name in ('validate.yml', 'validation.yml'):
-        p = os.path.join(RUNTIME_DIR, module_name, name)
+        p = os.path.join(module_dir, name)
         if os.path.exists(p):
             return _sse_stream(p, f'validation for {module_name}')
-    # Default to validate.yml (will show friendly error)
-    return _sse_stream(os.path.join(RUNTIME_DIR, module_name, 'validate.yml'),
+    return _sse_stream(os.path.join(module_dir, 'validate.yml'),
                        f'validation for {module_name}')
 
 
 @stream_app.route('/setup/<module_name>')
 def setup(module_name):
-    playbook = os.path.join(RUNTIME_DIR, module_name, 'setup.yml')
+    module_dir = _validated_module_dir(module_name)
+    if module_dir is None:
+        abort(400, description=f"Invalid module name: {module_name}")
+    playbook = os.path.join(module_dir, 'setup.yml')
     return _sse_stream(playbook, f'setup for {module_name}')
