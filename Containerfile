@@ -53,9 +53,9 @@ RUN mkdir -p /opt/app-root/src/.ansible/tmp && \
     chmod -R g+rwX /usr/share/ansible && \
     chmod -R g+rwX /app
 
-ENV BASE_DIR="/app"
 ENV HOST="0.0.0.0"
 ENV PORT=80
+ENV BASE_DIR=/showroom/repo
 
 USER ${USER_UID}
 
