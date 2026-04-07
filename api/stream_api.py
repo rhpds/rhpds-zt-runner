@@ -221,8 +221,14 @@ def solve(module_name):
 
 @stream_app.route('/validate/<module_name>')
 def validate(module_name):
-    playbook = os.path.join(RUNTIME_DIR, module_name, 'validate.yml')
-    return _sse_stream(playbook, f'validation for {module_name}')
+    # Support both validate.yml and validation.yml — transparent to developers
+    for name in ('validate.yml', 'validation.yml'):
+        p = os.path.join(RUNTIME_DIR, module_name, name)
+        if os.path.exists(p):
+            return _sse_stream(p, f'validation for {module_name}')
+    # Default to validate.yml (will show friendly error)
+    return _sse_stream(os.path.join(RUNTIME_DIR, module_name, 'validate.yml'),
+                       f'validation for {module_name}')
 
 
 @stream_app.route('/setup/<module_name>')
