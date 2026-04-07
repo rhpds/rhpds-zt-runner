@@ -55,7 +55,7 @@ RUN mkdir -p /opt/app-root/src/.ansible/tmp && \
 
 ENV BASE_DIR="/app"
 ENV HOST="0.0.0.0"
-ENV PORT=80
+ENV PORT=5000
 
 USER ${USER_UID}
 
