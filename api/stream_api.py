@@ -244,7 +244,7 @@ def _sse_stream(playbook_path, label):
 
         while True:
             try:
-                line = q.get(timeout=0.1)
+                line = q.get(timeout=15)
                 if line == '__DONE__':
                     yield "data: __DONE__\n\n"
                     break
