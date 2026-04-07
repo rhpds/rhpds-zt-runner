@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import os
-from ansible.errors import AnsibleError, AnsibleUndefinedVariable
+from ansible.errors import AnsibleError
 from ansible.plugins.action import ActionBase
 from ansible.playbook.conditional import Conditional
 from ansible.module_utils.six import string_types
