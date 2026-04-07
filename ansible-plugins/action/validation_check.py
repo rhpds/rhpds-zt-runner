@@ -98,24 +98,22 @@ class ActionModule(ActionBase):
             raise AnsibleError('At least one of error_msg or pass_msg must be provided.')
         
         # Validate error_msg type
-        if e_message != None:
-            e_message = e_message
+        if e_message is not None:
             if isinstance(e_message, list):
                 if not all(isinstance(x, string_types) for x in e_message):
                     raise AnsibleError('All elements in error_msg list must be strings.')
             elif not isinstance(e_message, (string_types, list)):
                 raise AnsibleError('error_msg must be a string or a list of strings.')
-            
+
         # Validate pass_msg type
-        if p_message != None:
-            p_message = p_message
+        if p_message is not None:
             if isinstance(p_message, list):
                 if not all(isinstance(x, string_types) for x in p_message):
                     raise AnsibleError('All elements in pass_msg list must be strings.')
             elif not isinstance(p_message, (string_types, list)):
                 raise AnsibleError('pass_msg must be a string or a list of strings.')
-        
-         # Ensure 'check' is a list
+
+        # Ensure 'check' is a list
         conditions = self._task.args['check']
         if not isinstance(conditions, list):
             conditions = [conditions]
