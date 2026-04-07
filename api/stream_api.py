@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-Flask SSE API server for classic Showroom solve/validate (Option B - Tyrell's approach).
+Flask SSE API server for classic Showroom solve/validate.
 
-Endpoints:
-  GET /stream/config               — list available modules (mounted at /stream in main.py)
-  GET /stream/solve/<module>       — run solve playbook, stream output via SSE
-  GET /stream/validate/<module>    — run validation playbook, stream output via SSE
-  GET /stream/health               — health check
+Runs on port 80. Nginx proxies /stream/* → this server (strips /stream prefix).
+
+Endpoints (called as /stream/<endpoint> from browser):
+  GET /health                  — health check
+  GET /config                  — list available modules
+  GET /solve/<module>          — stream solve output (SSE)
+  GET /validate/<module>       — stream validation output (validate.yml or validation.yml)
+  GET /setup/<module>          — stream setup output
+
+RUNTIME_DIR: BASE_DIR env var + /runtime-automation (default: /app/runtime-automation)
 
 Extravar injection (from showroom-userdata CM):
   - k8s_kubeconfig (OCP labs)
