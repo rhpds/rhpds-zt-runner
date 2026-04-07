@@ -31,6 +31,9 @@ import logging
 
 from flask import Flask, Response, jsonify, abort
 
+MAX_CONCURRENT_PLAYBOOKS = int(os.environ.get('MAX_CONCURRENT_PLAYBOOKS', 4))
+_playbook_semaphore = threading.Semaphore(MAX_CONCURRENT_PLAYBOOKS)
+
 # Reuse existing extravar injection from jobs.py
 from jobs import _load_user_data
 
@@ -131,6 +134,11 @@ def _run_playbook(playbook_path, output_queue):
         output_queue.put('__DONE__')
         return
 
+    if not _playbook_semaphore.acquire(timeout=5):
+        output_queue.put(f"ERROR: Too many concurrent playbooks (max {MAX_CONCURRENT_PLAYBOOKS}). Try again.\n")
+        output_queue.put('__DONE__')
+        return
+
     log_file = os.path.join(LOG_DIR, f"{os.path.basename(playbook_path)}-{int(time.time())}.log")
     job_info_dir = tempfile.mkdtemp(prefix='zt-job-info-')
     vars_file = None
@@ -189,6 +197,7 @@ def _run_playbook(playbook_path, output_queue):
     except Exception as e:
         output_queue.put(f'\nERROR: {e}\n')
     finally:
+        _playbook_semaphore.release()
         output_queue.put('__DONE__')
         for path in (vars_file, kubeconfig):
             try:
