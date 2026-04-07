@@ -11,8 +11,8 @@ by Mitesh Sharma, extended with `kubernetes.core` for OCP-native labs.
 
 ## Custom Ansible Plugins
 
-- `lab_check_fail` — writes error message to `job_info_dir/validation_failure.out` and fails
-- `validation_check` — conditional check, writes pass/fail message to file
+- `lab_check_fail` — writes error message to `job_info_dir/output.txt` and fails
+- `validation_check` — conditional check, writes pass/fail message to `job_info_dir/output.txt`
 
 ## Usage in runtime-automation
 

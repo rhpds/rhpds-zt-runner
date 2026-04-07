@@ -60,7 +60,7 @@ RUN ansible-galaxy collection install \
 RUN mkdir -p /usr/share/ansible/plugins/action
 COPY ansible-plugins/action/ /usr/share/ansible/plugins/action/
 
-# ── Runner API (FastAPI + ansible-runner) ─────────────────────────────────────
+# ── Runner API (Flask + Gunicorn SSE server) ──────────────────────────────────
 COPY api/ /app/
 
 # ── Fix permissions for OpenShift random UID (gid=0 must write) ──────────────
