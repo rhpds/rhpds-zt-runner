@@ -6,7 +6,7 @@ click==8.1.7
 cryptography==41.0.7
 docutils==0.20.1
 flask==3.0.0
-flask-cors==4.0.0
+flask-cors==6.0.0
 idna==3.6
 Jinja2==3.1.2
 lockfile==0.12.2
