@@ -108,8 +108,21 @@ def _install_lab_requirements():
             logger.warning('Failed to install lab collections: %s', e.stderr.decode())
 
 
-# Install lab requirements at startup
-_install_lab_requirements()
+_lab_reqs_installed = False
+
+
+def _ensure_lab_requirements():
+    """Install lab requirements once on first request, not at import time."""
+    global _lab_reqs_installed
+    if _lab_reqs_installed:
+        return
+    _lab_reqs_installed = True
+    _install_lab_requirements()
+
+
+@stream_app.before_request
+def _before_request():
+    _ensure_lab_requirements()
 
 
 def _build_extravars_file():
