@@ -3,7 +3,7 @@
 Flask SSE API server for classic Showroom solve/validate (Option B - Tyrell's approach).
 
 Endpoints:
-  GET /stream/config               — list available modules
+  GET /stream/config               — list available modules (mounted at /stream in main.py)
   GET /stream/solve/<module>       — run solve playbook, stream output via SSE
   GET /stream/validate/<module>    — run validation playbook, stream output via SSE
   GET /stream/health               — health check
@@ -183,12 +183,12 @@ def _sse_stream(playbook_path, label):
     return Response(generate(), mimetype='text/event-stream')
 
 
-@stream_app.route('/stream/health')
+@stream_app.route('/health')
 def health():
     return jsonify({'status': 'healthy'}), 200
 
 
-@stream_app.route('/stream/config')
+@stream_app.route('/config')
 def config():
     """List available modules by scanning runtime-automation/module-*/."""
     modules = {}
@@ -205,19 +205,19 @@ def config():
     return jsonify(modules), 200
 
 
-@stream_app.route('/stream/solve/<module_name>')
+@stream_app.route('/solve/<module_name>')
 def solve(module_name):
     playbook = os.path.join(RUNTIME_DIR, module_name, 'solve.yml')
     return _sse_stream(playbook, f'solve for {module_name}')
 
 
-@stream_app.route('/stream/validate/<module_name>')
+@stream_app.route('/validate/<module_name>')
 def validate(module_name):
     playbook = os.path.join(RUNTIME_DIR, module_name, 'validation.yml')
     return _sse_stream(playbook, f'validation for {module_name}')
 
 
-@stream_app.route('/stream/setup/<module_name>')
+@stream_app.route('/setup/<module_name>')
 def setup(module_name):
     playbook = os.path.join(RUNTIME_DIR, module_name, 'setup.yml')
     return _sse_stream(playbook, f'setup for {module_name}')
