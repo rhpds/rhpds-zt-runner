@@ -29,7 +29,17 @@ from flask import Flask, Response, jsonify
 from jobs import _load_user_data
 
 LOG_DIR = '/tmp/playbook-logs'
-RUNTIME_DIR = os.environ.get('BASE_DIR', '/app') + '/runtime-automation'
+
+# Auto-detect runtime-automation path:
+# - /showroom/repo/runtime-automation  (OCP zerotouch chart — git-cloner clones here)
+# - /app/runtime-automation            (RHEL vm_workload_showroom — mounted from host)
+# - override with RUNTIME_AUTOMATION_DIR env var
+_default_runtime = (
+    '/showroom/repo/runtime-automation'
+    if os.path.isdir('/showroom/repo/runtime-automation')
+    else os.environ.get('BASE_DIR', '/app') + '/runtime-automation'
+)
+RUNTIME_DIR = os.environ.get('RUNTIME_AUTOMATION_DIR', _default_runtime)
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
