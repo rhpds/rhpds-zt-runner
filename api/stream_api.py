@@ -116,11 +116,13 @@ def _run_playbook(playbook_path, output_queue):
         return
 
     log_file = os.path.join(LOG_DIR, f"{os.path.basename(playbook_path)}-{int(time.time())}.log")
+    job_info_dir = tempfile.mkdtemp(prefix='zt-job-info-')
 
     try:
         vars_file, kubeconfig = _build_extravars_file()
 
-        cmd = ['ansible-playbook', playbook_path, '-v', '-e', f'@{vars_file}']
+        cmd = ['ansible-playbook', playbook_path, '-v', '-e', f'@{vars_file}',
+               '-e', f'job_info_dir={job_info_dir}']
         if kubeconfig:
             cmd += ['-e', f'k8s_kubeconfig={kubeconfig}']
 
@@ -172,6 +174,12 @@ def _run_playbook(playbook_path, output_queue):
         output_queue.put(f'\nERROR: {e}\n')
     finally:
         output_queue.put('__DONE__')
+        # Clean up job_info_dir
+        try:
+            import shutil
+            shutil.rmtree(job_info_dir, ignore_errors=True)
+        except Exception:
+            pass
         # Keep last 10 logs
         try:
             logs = sorted([f for f in os.listdir(LOG_DIR) if f.endswith('.log')])
