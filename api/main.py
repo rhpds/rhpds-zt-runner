@@ -10,12 +10,39 @@ Endpoints:
   GET /setup/<module>            — stream setup output via SSE
 """
 import logging
-from stream_api import stream_app
 import os
 
 logging.basicConfig(level=logging.INFO)
 
 if __name__ == "__main__":
+    from gunicorn.app.base import BaseApplication
+    from stream_api import stream_app
+
+    class StandaloneApplication(BaseApplication):
+        def __init__(self, app, options=None):
+            self.options = options or {}
+            self.application = app
+            super().__init__()
+
+        def load_config(self):
+            for key, value in self.options.items():
+                if key in self.cfg.settings and value is not None:
+                    self.cfg.set(key.lower(), value)
+
+        def load(self):
+            return self.application
+
     port = int(os.environ.get("PORT", 5000))
-    logging.info("Starting ZT Runner Flask SSE API on port %s", port)
-    stream_app.run(host="0.0.0.0", port=port, threaded=True)
+    workers = int(os.environ.get("GUNICORN_WORKERS", 4))
+    options = {
+        "bind": f"0.0.0.0:{port}",
+        "workers": workers,
+        "worker_class": "gevent",
+        "timeout": 300,
+        "keepalive": 5,
+        "accesslog": "-",
+        "errorlog": "-",
+        "loglevel": os.environ.get("LOG_LEVEL", "info"),
+    }
+    logging.info("Starting ZT Runner on port %s with %s gevent workers", port, workers)
+    StandaloneApplication(stream_app, options).run()

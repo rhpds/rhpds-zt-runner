@@ -19,6 +19,8 @@ python-daemon==3.0.1
 python-dotenv==1.0.0
 PyYAML==6.0.1
 resolvelib==1.0.1
+gevent==24.11.1
+gunicorn==23.0.0
 setuptools==69.0.3
 six==1.16.0
 typing_extensions==4.9.0
