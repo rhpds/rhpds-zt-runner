@@ -3,7 +3,7 @@ ansible-core==2.16.2
 ansible-runner==2.3.4
 cffi==1.16.0
 click==8.1.7
-cryptography==41.0.7
+cryptography==46.0.6
 docutils==0.20.1
 flask==3.0.0
 flask-cors==4.0.0
