@@ -221,7 +221,7 @@ def solve(module_name):
 
 @stream_app.route('/validate/<module_name>')
 def validate(module_name):
-    playbook = os.path.join(RUNTIME_DIR, module_name, 'validation.yml')
+    playbook = os.path.join(RUNTIME_DIR, module_name, 'validate.yml')
     return _sse_stream(playbook, f'validation for {module_name}')
 
 
