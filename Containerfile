@@ -13,6 +13,8 @@
 # =============================================================================
 FROM registry.access.redhat.com/ubi9/python-311
 
+ARG OC_VERSION=4.20.18
+
 WORKDIR /app/
 
 USER root
@@ -31,8 +33,7 @@ RUN npm install -g playwright && \
     npx playwright install chromium && \
     chmod -R g+rwX /app/.playwright
 
-RUN OC_VERSION=4.20.18 && \
-  curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux.tar.gz | \
+RUN curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux.tar.gz | \
   tar xz -C /usr/local/bin oc kubectl && \
   chmod +x /usr/local/bin/oc /usr/local/bin/kubectl
 
