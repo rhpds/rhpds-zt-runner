@@ -114,11 +114,14 @@ def _build_extravars_file():
     """
     extravars = _load_user_data()
     kubeconfig = extravars.pop('k8s_kubeconfig', '')
-    tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False, prefix='zt-extravars-')
-    for k, v in extravars.items():
-        tmp.write(f"{k}: {json.dumps(v)}\n")
-    tmp.close()
-    return tmp.name, kubeconfig
+    fd = tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False, prefix='zt-extravars-')
+    try:
+        os.fchmod(fd.fileno(), 0o600)
+        for k, v in extravars.items():
+            fd.write(f"{k}: {json.dumps(v)}\n")
+    finally:
+        fd.close()
+    return fd.name, kubeconfig
 
 
 def _run_playbook(playbook_path, output_queue):
@@ -130,13 +133,14 @@ def _run_playbook(playbook_path, output_queue):
 
     log_file = os.path.join(LOG_DIR, f"{os.path.basename(playbook_path)}-{int(time.time())}.log")
     job_info_dir = tempfile.mkdtemp(prefix='zt-job-info-')
+    vars_file = None
+    kubeconfig = None
 
     try:
         vars_file, kubeconfig = _build_extravars_file()
 
         cmd = ['ansible-playbook', playbook_path]
 
-        # Add verbosity flag if set (e.g., ANSIBLE_VERBOSITY="-v" or "-vv")
         verbosity = os.environ.get('ANSIBLE_VERBOSITY', '').strip()
         if verbosity:
             cmd.append(verbosity)
@@ -176,7 +180,6 @@ def _run_playbook(playbook_path, output_queue):
             pass
 
         proc.wait()
-        os.unlink(vars_file)
 
         if proc.returncode == 0:
             output_queue.put('\n✓ Completed successfully!\n')
@@ -187,13 +190,17 @@ def _run_playbook(playbook_path, output_queue):
         output_queue.put(f'\nERROR: {e}\n')
     finally:
         output_queue.put('__DONE__')
-        # Clean up job_info_dir
+        for path in (vars_file, kubeconfig):
+            try:
+                if path and os.path.isfile(path):
+                    os.unlink(path)
+            except OSError:
+                pass
         try:
             import shutil
             shutil.rmtree(job_info_dir, ignore_errors=True)
         except Exception:
             pass
-        # Keep last 10 logs
         try:
             logs = sorted([f for f in os.listdir(LOG_DIR) if f.endswith('.log')])
             for old in logs[:-10]:
