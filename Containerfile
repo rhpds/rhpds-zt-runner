@@ -23,6 +23,7 @@ RUN dnf install -y sshpass nodejs npm && dnf clean all
 # Installs playwright + Chromium so solve.yml can call Playwright .js scripts
 # via ansible.builtin.script for steps that require browser automation.
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
+ENV NODE_PATH=/usr/local/lib/node_modules
 RUN npm install -g playwright && \
     npx playwright install chromium && \
     chmod -R g+rwX /app/.playwright
