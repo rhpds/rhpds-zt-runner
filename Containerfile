@@ -17,7 +17,15 @@ WORKDIR /app/
 
 USER root
 
-RUN dnf install -y sshpass && dnf clean all
+RUN dnf install -y sshpass nodejs npm && dnf clean all
+
+# ── Playwright (headless browser for UI-based lab steps) ──────────────────────
+# Installs playwright + Chromium so solve.yml can call Playwright .js scripts
+# via ansible.builtin.script for steps that require browser automation.
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
+RUN npm install -g playwright && \
+    npx playwright install chromium && \
+    chmod -R g+rwX /app/.playwright
 
 RUN OC_VERSION=4.20.18 && \
   curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux.tar.gz | \
