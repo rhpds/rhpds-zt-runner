@@ -17,7 +17,10 @@ WORKDIR /app/
 
 USER root
 
-RUN dnf install -y sshpass nodejs npm && dnf clean all
+RUN dnf install -y sshpass nodejs npm \
+    nss nspr atk at-spi2-atk cups-libs libXcomposite libXdamage \
+    libXfixes libXrandr libgbm libxkbcommon pango alsa-lib && \
+    dnf clean all
 
 # ── Playwright (headless browser for UI-based lab steps) ──────────────────────
 # Installs playwright + Chromium so solve.yml can call Playwright .js scripts
