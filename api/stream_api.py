@@ -157,12 +157,6 @@ def _run_playbook(playbook_path, output_queue):
                     tail.terminate()
             elif proc.poll() is not None:
                 break
-
-        time.sleep(0.2)
-        with open(log_file) as f:
-            for line in f.readlines()[-5:]:
-                output_queue.put(line)
-
         try:
             tail.wait(timeout=1)
         except Exception:
