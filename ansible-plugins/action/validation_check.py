@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import os
-from ansible.errors import AnsibleError, AnsibleUndefinedVariable
+from ansible.errors import AnsibleError
 from ansible.plugins.action import ActionBase
 from ansible.playbook.conditional import Conditional
 from ansible.module_utils.six import string_types
@@ -98,24 +98,22 @@ class ActionModule(ActionBase):
             raise AnsibleError('At least one of error_msg or pass_msg must be provided.')
         
         # Validate error_msg type
-        if e_message != None:
-            e_message = e_message
+        if e_message is not None:
             if isinstance(e_message, list):
                 if not all(isinstance(x, string_types) for x in e_message):
                     raise AnsibleError('All elements in error_msg list must be strings.')
             elif not isinstance(e_message, (string_types, list)):
                 raise AnsibleError('error_msg must be a string or a list of strings.')
-            
+
         # Validate pass_msg type
-        if p_message != None:
-            p_message = p_message
+        if p_message is not None:
             if isinstance(p_message, list):
                 if not all(isinstance(x, string_types) for x in p_message):
                     raise AnsibleError('All elements in pass_msg list must be strings.')
             elif not isinstance(p_message, (string_types, list)):
                 raise AnsibleError('pass_msg must be a string or a list of strings.')
-        
-         # Ensure 'check' is a list
+
+        # Ensure 'check' is a list
         conditions = self._task.args['check']
         if not isinstance(conditions, list):
             conditions = [conditions]
@@ -136,18 +134,17 @@ class ActionModule(ActionBase):
             cond.when = [condition]
             test_result = cond.evaluate_conditional(templar=self._templar, all_vars=task_vars)
             try:
-                
-                if not test_result and e_message != None:
-                    f = open(output_result_path, 'w')
-                    f.write(e_message)
+                if not test_result and e_message is not None:
+                    with open(output_result_path, 'w') as f:
+                        f.write(e_message)
                     result['failed'] = True
                     result['evaluated_to'] = test_result
                     result['condition'] = condition
                     result['msg'] = f"{e_message} : Message written to log"
                     return result
-                elif test_result and p_message != None:
-                    f = open(output_result_path, 'w')
-                    f.write(p_message)
+                elif test_result and p_message is not None:
+                    with open(output_result_path, 'w') as f:
+                        f.write(p_message)
                     result['changed'] = True
                     result['evaluated_to'] = test_result
                     result['condition'] = condition
@@ -159,6 +156,6 @@ class ActionModule(ActionBase):
                     return result
 
             except Exception as e:
-                    result['failed'] = True
-                    result['msg'] = f"Failed to write message to log: {e}"
-                    return result
+                result['failed'] = True
+                result['msg'] = f"Failed to write message to log: {e}"
+                return result

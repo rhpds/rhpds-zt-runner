@@ -20,6 +20,7 @@ Extravar injection (from showroom-userdata CM):
 """
 
 import os
+import re
 import json
 import time
 import queue
@@ -27,8 +28,13 @@ import threading
 import tempfile
 import subprocess
 import logging
+from pathlib import Path
 
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, abort
+from flask_cors import CORS
+
+MAX_CONCURRENT_PLAYBOOKS = int(os.environ.get('MAX_CONCURRENT_PLAYBOOKS', 4))
+_playbook_semaphore = threading.Semaphore(MAX_CONCURRENT_PLAYBOOKS)
 
 # Reuse existing extravar injection from jobs.py
 from jobs import _load_user_data
@@ -52,7 +58,20 @@ RUNTIME_DIR = os.path.join(os.environ.get('BASE_DIR', _base), 'runtime-automatio
 os.makedirs(LOG_DIR, exist_ok=True)
 
 stream_app = Flask(__name__)
+CORS(stream_app)
 logger = logging.getLogger('stream_api')
+
+_MODULE_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]*$')
+
+
+def _validated_module_dir(module_name):
+    """Validate module_name to prevent path traversal and return its absolute path."""
+    if not _MODULE_RE.match(module_name):
+        return None
+    candidate = os.path.realpath(os.path.join(RUNTIME_DIR, module_name))
+    if not candidate.startswith(os.path.realpath(RUNTIME_DIR) + os.sep):
+        return None
+    return candidate
 
 
 def _install_lab_requirements():
@@ -90,8 +109,21 @@ def _install_lab_requirements():
             logger.warning('Failed to install lab collections: %s', e.stderr.decode())
 
 
-# Install lab requirements at startup
-_install_lab_requirements()
+_lab_reqs_installed = False
+
+
+def _ensure_lab_requirements():
+    """Install lab requirements once on first request, not at import time."""
+    global _lab_reqs_installed
+    if _lab_reqs_installed:
+        return
+    _lab_reqs_installed = True
+    _install_lab_requirements()
+
+
+@stream_app.before_request
+def _before_request():
+    _ensure_lab_requirements()
 
 
 def _build_extravars_file():
@@ -101,11 +133,14 @@ def _build_extravars_file():
     """
     extravars = _load_user_data()
     kubeconfig = extravars.pop('k8s_kubeconfig', '')
-    tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False, prefix='zt-extravars-')
-    for k, v in extravars.items():
-        tmp.write(f"{k}: {json.dumps(v)}\n")
-    tmp.close()
-    return tmp.name, kubeconfig
+    fd = tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False, prefix='zt-extravars-')
+    try:
+        os.fchmod(fd.fileno(), 0o600)
+        for k, v in extravars.items():
+            fd.write(f"{k}: {json.dumps(v)}\n")
+    finally:
+        fd.close()
+    return fd.name, kubeconfig
 
 
 def _run_playbook(playbook_path, output_queue):
@@ -115,15 +150,21 @@ def _run_playbook(playbook_path, output_queue):
         output_queue.put('__DONE__')
         return
 
+    if not _playbook_semaphore.acquire(timeout=5):
+        output_queue.put(f"ERROR: Too many concurrent playbooks (max {MAX_CONCURRENT_PLAYBOOKS}). Try again.\n")
+        output_queue.put('__DONE__')
+        return
+
     log_file = os.path.join(LOG_DIR, f"{os.path.basename(playbook_path)}-{int(time.time())}.log")
     job_info_dir = tempfile.mkdtemp(prefix='zt-job-info-')
+    vars_file = None
+    kubeconfig = None
 
     try:
         vars_file, kubeconfig = _build_extravars_file()
 
         cmd = ['ansible-playbook', playbook_path]
 
-        # Add verbosity flag if set (e.g., ANSIBLE_VERBOSITY="-v" or "-vv")
         verbosity = os.environ.get('ANSIBLE_VERBOSITY', '').strip()
         if verbosity:
             cmd.append(verbosity)
@@ -136,7 +177,7 @@ def _run_playbook(playbook_path, output_queue):
         env['PYTHONUNBUFFERED'] = '1'
         env['ANSIBLE_FORCE_COLOR'] = '0'
 
-        open(log_file, 'w').close()
+        Path(log_file).touch()
 
         tail = subprocess.Popen(
             ['tail', '-f', log_file],
@@ -147,23 +188,19 @@ def _run_playbook(playbook_path, output_queue):
         with open(log_file, 'w') as log:
             proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env)
 
-        done = False
-        while not done:
+        while True:
             line = tail.stdout.readline()
             if line:
                 output_queue.put(line)
-                if 'PLAY RECAP' in line and '*' in line:
-                    done = True
-                    tail.terminate()
             elif proc.poll() is not None:
                 break
         try:
-            tail.wait(timeout=1)
+            tail.terminate()
+            tail.wait(timeout=2)
         except Exception:
             pass
 
         proc.wait()
-        os.unlink(vars_file)
 
         if proc.returncode == 0:
             output_queue.put('\n✓ Completed successfully!\n')
@@ -173,14 +210,19 @@ def _run_playbook(playbook_path, output_queue):
     except Exception as e:
         output_queue.put(f'\nERROR: {e}\n')
     finally:
+        _playbook_semaphore.release()
         output_queue.put('__DONE__')
-        # Clean up job_info_dir
+        for path in (vars_file, kubeconfig):
+            try:
+                if path and os.path.isfile(path):
+                    os.unlink(path)
+            except OSError:
+                pass
         try:
             import shutil
             shutil.rmtree(job_info_dir, ignore_errors=True)
         except Exception:
             pass
-        # Keep last 10 logs
         try:
             logs = sorted([f for f in os.listdir(LOG_DIR) if f.endswith('.log')])
             for old in logs[:-10]:
@@ -200,7 +242,7 @@ def _sse_stream(playbook_path, label):
 
         while True:
             try:
-                line = q.get(timeout=0.1)
+                line = q.get(timeout=15)
                 if line == '__DONE__':
                     yield "data: __DONE__\n\n"
                     break
@@ -208,12 +250,39 @@ def _sse_stream(playbook_path, label):
             except queue.Empty:
                 yield ": keepalive\n\n"
 
-    return Response(generate(), mimetype='text/event-stream')
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+        },
+    )
 
 
 @stream_app.route('/health')
 def health():
-    return jsonify({'status': 'healthy'}), 200
+    checks = {'api': 'ok'}
+    status_code = 200
+
+    if not os.path.isdir(RUNTIME_DIR):
+        checks['runtime_dir'] = f'missing: {RUNTIME_DIR}'
+        status_code = 503
+    else:
+        checks['runtime_dir'] = 'ok'
+
+    try:
+        subprocess.run(
+            ['ansible-playbook', '--version'],
+            capture_output=True, timeout=5, check=True
+        )
+        checks['ansible'] = 'ok'
+    except Exception:
+        checks['ansible'] = 'unavailable'
+        status_code = 503
+
+    checks['status'] = 'healthy' if status_code == 200 else 'degraded'
+    return jsonify(checks), status_code
 
 
 @stream_app.route('/config')
@@ -235,23 +304,30 @@ def config():
 
 @stream_app.route('/solve/<module_name>')
 def solve(module_name):
-    playbook = os.path.join(RUNTIME_DIR, module_name, 'solve.yml')
+    module_dir = _validated_module_dir(module_name)
+    if module_dir is None:
+        abort(400, description=f"Invalid module name: {module_name}")
+    playbook = os.path.join(module_dir, 'solve.yml')
     return _sse_stream(playbook, f'solve for {module_name}')
 
 
 @stream_app.route('/validate/<module_name>')
 def validate(module_name):
-    # Support both validate.yml and validation.yml — transparent to developers
+    module_dir = _validated_module_dir(module_name)
+    if module_dir is None:
+        abort(400, description=f"Invalid module name: {module_name}")
     for name in ('validate.yml', 'validation.yml'):
-        p = os.path.join(RUNTIME_DIR, module_name, name)
+        p = os.path.join(module_dir, name)
         if os.path.exists(p):
             return _sse_stream(p, f'validation for {module_name}')
-    # Default to validate.yml (will show friendly error)
-    return _sse_stream(os.path.join(RUNTIME_DIR, module_name, 'validate.yml'),
+    return _sse_stream(os.path.join(module_dir, 'validate.yml'),
                        f'validation for {module_name}')
 
 
 @stream_app.route('/setup/<module_name>')
 def setup(module_name):
-    playbook = os.path.join(RUNTIME_DIR, module_name, 'setup.yml')
+    module_dir = _validated_module_dir(module_name)
+    if module_dir is None:
+        abort(400, description=f"Invalid module name: {module_name}")
+    playbook = os.path.join(module_dir, 'setup.yml')
     return _sse_stream(playbook, f'setup for {module_name}')

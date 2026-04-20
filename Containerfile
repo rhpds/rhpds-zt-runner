@@ -11,43 +11,40 @@
 # Source: https://github.com/rhpds/rhpds-zt-runner
 # Image:  quay.io/rhpds/zt-runner
 # =============================================================================
-FROM registry.access.redhat.com/ubi9/python-311
+FROM registry.access.redhat.com/ubi9/python-311:9.7
 
-WORKDIR /app/
+ARG OC_VERSION=4.20.18
 
 USER root
 
+# ── System packages ──────────────────────────────────────────────────────────
 RUN dnf install -y sshpass nodejs npm \
     nss nspr atk at-spi2-atk cups-libs libXcomposite libXdamage \
     libXfixes libXrandr libgbm libxkbcommon pango alsa-lib && \
     dnf clean all
 
-# ── Playwright (headless browser for UI-based lab steps) ──────────────────────
-# Installs playwright + Chromium so solve.yml can call Playwright .js scripts
-# via ansible.builtin.script for steps that require browser automation.
+# ── Playwright (headless Chromium for browser-based lab steps) ───────────────
+RUN mkdir -p /app
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
 ENV NODE_PATH=/usr/local/lib/node_modules
 RUN npm install -g playwright && \
     npx playwright install chromium && \
     chmod -R g+rwX /app/.playwright
 
-RUN OC_VERSION=4.20.18 && \
-  curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux.tar.gz | \
-  tar xz -C /usr/local/bin oc kubectl && \
-  chmod +x /usr/local/bin/oc /usr/local/bin/kubectl
+# ── OpenShift CLI ────────────────────────────────────────────────────────────
+RUN curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux.tar.gz | \
+    tar xz -C /usr/local/bin oc kubectl && \
+    chmod +x /usr/local/bin/oc /usr/local/bin/kubectl
 
-RUN chown -R ${USER_UID}:0 /app
+# ── Python packages (via S2I assemble) ──────────────────────────────────────
+USER 0
+COPY requirements.txt /tmp/src/requirements.txt
+RUN /usr/bin/fix-permissions /tmp/src
+USER 1001
+RUN /usr/libexec/s2i/assemble
 
-# ── Python packages ───────────────────────────────────────────────────────────
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r /app/requirements.txt && \
-    pip install --no-cache-dir \
-        kubernetes \
-        jmespath \
-        netaddr
-
-# ── Ansible Collections ───────────────────────────────────────────────────────
+# ── Ansible Collections ─────────────────────────────────────────────────────
+USER root
 RUN ansible-galaxy collection install \
     kubernetes.core \
     ansible.posix \
@@ -56,15 +53,14 @@ RUN ansible-galaxy collection install \
     community.hashi_vault \
     --collections-path /usr/share/ansible/collections
 
-# ── Custom Ansible action plugins (Mitesh's lab_check_fail + validation_check) ─
+# ── Custom Ansible action plugins ───────────────────────────────────────────
 RUN mkdir -p /usr/share/ansible/plugins/action
 COPY ansible-plugins/action/ /usr/share/ansible/plugins/action/
 
-# ── Runner API (FastAPI + ansible-runner) ─────────────────────────────────────
+# ── Runner API (Flask + Gunicorn SSE server) ────────────────────────────────
 COPY api/ /app/
 
-# ── Fix permissions for OpenShift random UID (gid=0 must write) ──────────────
-# ansible-galaxy creates .ansible/tmp as root — must be group-writable
+# ── Permissions for OpenShift random UID (gid=0 must write) ─────────────────
 RUN mkdir -p /opt/app-root/src/.ansible/tmp && \
     chmod -R g+rwX /opt/app-root/src/.ansible && \
     chown -R 1001:0 /opt/app-root/src/.ansible && \
@@ -74,6 +70,7 @@ RUN mkdir -p /opt/app-root/src/.ansible/tmp && \
 ENV HOST="0.0.0.0"
 ENV PORT=80
 
-USER ${USER_UID}
+WORKDIR /app
+USER 1001
 
 CMD ["python", "main.py"]
