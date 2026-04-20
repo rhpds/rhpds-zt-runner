@@ -28,6 +28,7 @@ import threading
 import tempfile
 import subprocess
 import logging
+from pathlib import Path
 
 from flask import Flask, Response, jsonify, abort
 from flask_cors import CORS
@@ -176,7 +177,7 @@ def _run_playbook(playbook_path, output_queue):
         env['PYTHONUNBUFFERED'] = '1'
         env['ANSIBLE_FORCE_COLOR'] = '0'
 
-        open(log_file, 'w').close()
+        Path(log_file).touch()
 
         tail = subprocess.Popen(
             ['tail', '-f', log_file],
