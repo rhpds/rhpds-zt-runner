@@ -36,7 +36,7 @@ if __name__ == "__main__":
             return self.application
 
     port = int(os.environ.get("PORT", 5000))
-    workers = int(os.environ.get("GUNICORN_WORKERS", 4))
+    workers = int(os.environ.get("GUNICORN_WORKERS", 2))
     options = {
         "bind": f"0.0.0.0:{port}",
         "workers": workers,
