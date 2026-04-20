@@ -187,18 +187,15 @@ def _run_playbook(playbook_path, output_queue):
         with open(log_file, 'w') as log:
             proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env)
 
-        done = False
-        while not done:
+        while True:
             line = tail.stdout.readline()
             if line:
                 output_queue.put(line)
-                if 'PLAY RECAP' in line and '*' in line:
-                    done = True
-                    tail.terminate()
             elif proc.poll() is not None:
                 break
         try:
-            tail.wait(timeout=1)
+            tail.terminate()
+            tail.wait(timeout=2)
         except Exception:
             pass
 
