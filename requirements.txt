@@ -18,7 +18,6 @@ pexpect==4.9.0
 ptyprocess==0.7.0
 pycparser==2.21
 python-daemon==3.0.1
-python-dotenv==1.0.0
 PyYAML==6.0.1
 resolvelib==1.0.1
 setuptools==75.8.0
