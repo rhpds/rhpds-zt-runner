@@ -68,7 +68,7 @@ RUN mkdir -p /opt/app-root/src/.ansible/tmp && \
     chmod -R g+rwX /app
 
 ENV HOST="0.0.0.0"
-ENV PORT=80
+ENV PORT=8501
 
 WORKDIR /app
 USER 1001
