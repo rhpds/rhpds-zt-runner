@@ -9,6 +9,9 @@ Endpoints:
   GET /validate/<module>         — stream validation output via SSE
   GET /setup/<module>            — stream setup output via SSE
 """
+from gevent import monkey
+monkey.patch_all()
+
 import logging
 import os
 
