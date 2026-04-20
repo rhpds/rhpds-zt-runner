@@ -249,7 +249,14 @@ def _sse_stream(playbook_path, label):
             except queue.Empty:
                 yield ": keepalive\n\n"
 
-    return Response(generate(), mimetype='text/event-stream')
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+        },
+    )
 
 
 @stream_app.route('/health')
