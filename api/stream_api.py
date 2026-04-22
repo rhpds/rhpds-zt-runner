@@ -40,6 +40,8 @@ _playbook_semaphore = threading.Semaphore(MAX_CONCURRENT_PLAYBOOKS)
 from jobs import _load_user_data
 
 LOG_DIR = '/tmp/playbook-logs'
+MAX_CONCURRENT_PLAYBOOKS = int(os.environ.get('MAX_CONCURRENT_PLAYBOOKS', 4))
+_playbook_semaphore = threading.Semaphore(MAX_CONCURRENT_PLAYBOOKS)
 
 # Auto-detect runtime-automation path:
 # - /showroom/repo/runtime-automation  (OCP zerotouch chart — git-cloner clones here)
