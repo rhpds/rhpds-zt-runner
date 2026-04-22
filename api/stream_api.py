@@ -40,8 +40,6 @@ _playbook_semaphore = threading.Semaphore(MAX_CONCURRENT_PLAYBOOKS)
 from jobs import _load_user_data
 
 LOG_DIR = '/tmp/playbook-logs'
-MAX_CONCURRENT_PLAYBOOKS = int(os.environ.get('MAX_CONCURRENT_PLAYBOOKS', 4))
-_playbook_semaphore = threading.Semaphore(MAX_CONCURRENT_PLAYBOOKS)
 
 # Auto-detect runtime-automation path:
 # - /showroom/repo/runtime-automation  (OCP zerotouch chart — git-cloner clones here)
@@ -190,10 +188,16 @@ def _run_playbook(playbook_path, output_queue):
         with open(log_file, 'w') as log:
             proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env)
 
-        while True:
+        done = False
+        while not done:
             line = tail.stdout.readline()
             if line:
                 output_queue.put(line)
+                # PLAY RECAP signals end of playbook — terminate tail so readline
+                # doesn't block forever waiting for more output from tail -f
+                if 'PLAY RECAP' in line and '*' in line:
+                    done = True
+                    tail.terminate()
             elif proc.poll() is not None:
                 break
         try:
